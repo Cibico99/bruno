@@ -40,7 +40,7 @@ const ResponsePane = ({ rightPaneWidth, item, collection }) => {
           <QueryResult
             item={item}
             collection={collection}
-            width={rightPaneWidth}
+            height={rightPaneWidth}
             data={response.data}
             dataBuffer={response.dataBuffer}
             headers={response.headers}
