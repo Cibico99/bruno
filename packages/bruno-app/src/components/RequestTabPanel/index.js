@@ -37,9 +37,9 @@ const RequestTabPanel = () => {
   let asideWidth = useSelector((state) => state.app.leftSidebarWidth);
   const focusedTab = find(tabs, (t) => t.uid === activeTabUid);
   const [leftPaneWidth, setLeftPaneWidth] = useState(
-    focusedTab && focusedTab.requestPaneWidth ? focusedTab.requestPaneWidth : (screenHeight - asideWidth) / 2.2
+    focusedTab && focusedTab.requestPaneWidth ? focusedTab.requestPaneWidth : (screenWidth - asideWidth) / 2.2
   ); // 2.2 so that request pane is relatively smaller
-  const [rightPaneWidth, setRightPaneWidth] = useState(screenHeight - asideWidth - leftPaneWidth - DEFAULT_PADDING);
+  const [rightPaneWidth, setRightPaneWidth] = useState(screenWidth - asideWidth - leftPaneWidth - DEFAULT_PADDING);
   const [dragging, setDragging] = useState(false);
 
   // Not a recommended pattern here to have the child component
@@ -71,14 +71,15 @@ const RequestTabPanel = () => {
     if (dragging) {
       e.preventDefault();
       let leftPaneXPosition = e.clientY + 2;
-      if (
+      /*if (
         leftPaneXPosition < DEFAULT_PADDING + MIN_LEFT_PANE_WIDTH ||
         leftPaneXPosition > screenWidth - MIN_RIGHT_PANE_WIDTH
       ) {
         return;
-      }
-      setLeftPaneWidth(leftPaneXPosition - asideWidth);
-      setRightPaneWidth(screenWidth - e.clientY - DEFAULT_PADDING);
+      }*/
+      console.log('height: ' + screenHeight);
+      setLeftPaneWidth(leftPaneXPosition - 200);
+      setRightPaneWidth(screenHeight - e.clientY - DEFAULT_PADDING);
     }
   };
   const handleMouseUp = (e) => {

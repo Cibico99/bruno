@@ -16,6 +16,7 @@ const Wrapper = styled.div`
 
     section.request-pane,
     section.response-pane {
+      overflow: hidden;
     }
   }
 
