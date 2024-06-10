@@ -59,13 +59,13 @@ const RequestTabPanel = () => {
   };
 
   useEffect(() => {
-    const leftPaneWidth = screenWidth / 2.2;
+    const leftPaneWidth = screenHeight / 2.2;
     setLeftPaneWidth(leftPaneWidth);
-  }, [screenWidth]);
+  }, [screenHeight]);
 
   useEffect(() => {
-    setRightPaneWidth(screenWidth - leftPaneWidth - DEFAULT_PADDING);
-  }, [screenWidth, asideWidth, leftPaneWidth]);
+    setRightPaneWidth(screenHeight / 2.2 - DEFAULT_PADDING);
+  }, [screenHeight, asideWidth, leftPaneWidth]);
 
   const handleMouseMove = (e) => {
     if (dragging) {
