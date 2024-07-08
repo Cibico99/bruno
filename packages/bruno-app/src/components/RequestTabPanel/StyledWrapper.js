@@ -2,27 +2,27 @@ import styled from 'styled-components';
 
 const StyledWrapper = styled.div`
   &.dragging {
-    cursor: col-resize;
+    cursor: row-resize;
   }
 
   div.drag-request {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 10px;
+    height: 10px;
     padding: 0;
-    cursor: col-resize;
+    cursor: row-resize;
     background: transparent;
 
     div.drag-request-border {
       display: flex;
-      height: 100%;
-      width: 1px;
-      border-left: solid 1px ${(props) => props.theme.requestTabPanel.dragbar.border};
+      width: 100%;
+      height: 1px;
+      border-top: solid 1px ${(props) => props.theme.requestTabPanel.dragbar.border};
     }
 
     &:hover div.drag-request-border {
-      border-left: solid 1px ${(props) => props.theme.requestTabPanel.dragbar.activeBorder};
+      border-top: solid 1px ${(props) => props.theme.requestTabPanel.dragbar.activeBorder};
     }
   }
 

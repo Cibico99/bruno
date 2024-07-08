@@ -8,7 +8,7 @@ const Wrapper = styled.div`
   max-height: 100vh;
 
   &.is-dragging {
-    cursor: col-resize !important;
+    cursor: row-resize !important;
   }
 
   section.main {
@@ -16,6 +16,7 @@ const Wrapper = styled.div`
 
     section.request-pane,
     section.response-pane {
+      overflow: hidden;
     }
   }
 

@@ -33,6 +33,7 @@ const RequestTabPanel = () => {
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
   const collections = useSelector((state) => state.collections.collections);
   const screenWidth = useSelector((state) => state.app.screenWidth);
+  const screenHeight = useSelector((state) => state.app.screenHeight);
 
   let asideWidth = useSelector((state) => state.app.leftSidebarWidth);
   const focusedTab = find(tabs, (t) => t.uid === activeTabUid);
@@ -59,26 +60,27 @@ const RequestTabPanel = () => {
   };
 
   useEffect(() => {
-    const leftPaneWidth = (screenWidth - asideWidth) / 2.2;
+    const leftPaneWidth = screenHeight / 2.2;
     setLeftPaneWidth(leftPaneWidth);
-  }, [screenWidth]);
+  }, [screenHeight]);
 
   useEffect(() => {
-    setRightPaneWidth(screenWidth - asideWidth - leftPaneWidth - DEFAULT_PADDING);
-  }, [screenWidth, asideWidth, leftPaneWidth]);
+    setRightPaneWidth(screenHeight / 2.2 - DEFAULT_PADDING);
+  }, [screenHeight, asideWidth, leftPaneWidth]);
 
   const handleMouseMove = (e) => {
     if (dragging) {
       e.preventDefault();
-      let leftPaneXPosition = e.clientX + 2;
-      if (
-        leftPaneXPosition < asideWidth + DEFAULT_PADDING + MIN_LEFT_PANE_WIDTH ||
+      let leftPaneXPosition = e.clientY + 2;
+      /*if (
+        leftPaneXPosition < DEFAULT_PADDING + MIN_LEFT_PANE_WIDTH ||
         leftPaneXPosition > screenWidth - MIN_RIGHT_PANE_WIDTH
       ) {
         return;
-      }
-      setLeftPaneWidth(leftPaneXPosition - asideWidth);
-      setRightPaneWidth(screenWidth - e.clientX - DEFAULT_PADDING);
+      }*/
+      console.log('height: ' + screenHeight);
+      setLeftPaneWidth(leftPaneXPosition - 200);
+      setRightPaneWidth(screenHeight - e.clientY - DEFAULT_PADDING);
     }
   };
   const handleMouseUp = (e) => {
@@ -88,7 +90,7 @@ const RequestTabPanel = () => {
       dispatch(
         updateRequestPaneTabWidth({
           uid: activeTabUid,
-          requestPaneWidth: e.clientX - asideWidth - DEFAULT_PADDING
+          requestPaneWidth: e.clientY - asideWidth - DEFAULT_PADDING
         })
       );
     }
@@ -155,13 +157,13 @@ const RequestTabPanel = () => {
       <div className="pt-4 pb-3 px-4">
         <QueryUrl item={item} collection={collection} handleRun={handleRun} />
       </div>
-      <section className="main flex flex-grow pb-4 relative">
+      <section className="main flex-col flex-grow pb-4 relative">
         <section className="request-pane">
           <div
             className="px-4"
             style={{
-              width: `${Math.max(leftPaneWidth, MIN_LEFT_PANE_WIDTH)}px`,
-              height: `calc(100% - ${DEFAULT_PADDING}px)`
+              height: `${Math.max(leftPaneWidth, MIN_LEFT_PANE_WIDTH)}px`,
+              width: `calc(100% - ${DEFAULT_PADDING}px)`
             }}
           >
             {item.type === 'graphql-request' ? (

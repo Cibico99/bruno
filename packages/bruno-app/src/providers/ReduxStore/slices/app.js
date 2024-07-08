@@ -39,6 +39,7 @@ export const appSlice = createSlice({
     },
     refreshScreenWidth: (state) => {
       state.screenWidth = window.innerWidth;
+      state.screenHeight = window.innerHeight;
     },
     updateLeftSidebarWidth: (state, action) => {
       state.leftSidebarWidth = action.payload.leftSidebarWidth;
