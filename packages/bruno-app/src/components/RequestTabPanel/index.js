@@ -18,6 +18,7 @@ import CollectionSettings from 'components/CollectionSettings';
 import { DocExplorer } from '@usebruno/graphql-docs';
 
 import StyledWrapper from './StyledWrapper';
+import SecuritySettings from 'components/SecuritySettings';
 import FolderSettings from 'components/FolderSettings';
 
 const MIN_LEFT_PANE_WIDTH = 300;
@@ -139,6 +140,10 @@ const RequestTabPanel = () => {
     return <FolderSettings collection={collection} folder={folder} />;
   }
 
+  if (focusedTab.type === 'security-settings') {
+    return <SecuritySettings collection={collection} />;
+  }
+
   const item = findItemInCollection(collection, activeTabUid);
   if (!item || !item.uid) {
     return <RequestNotFound itemUid={activeTabUid} />;
@@ -160,7 +165,7 @@ const RequestTabPanel = () => {
       <section className="main flex-col flex-grow pb-4 relative">
         <section className="request-pane">
           <div
-            className="px-4"
+            className="px-4 h-full"
             style={{
               height: `${Math.max(leftPaneWidth, MIN_LEFT_PANE_WIDTH)}px`,
               width: `calc(100% - ${DEFAULT_PADDING}px)`

@@ -1,16 +1,22 @@
 import MarkdownIt from 'markdown-it';
+import * as MarkdownItReplaceLink from 'markdown-it-replace-link';
 import StyledWrapper from './StyledWrapper';
 import React from 'react';
+import { isValidUrl } from 'utils/url/index';
 
-const md = new MarkdownIt();
+const Markdown = ({ collectionPath, onDoubleClick, content }) => {
+  const markdownItOptions = {
+    replaceLink: function (link, env) {
+      return link.replace(/^\./, collectionPath);
+    }
+  };
 
-const Markdown = ({ onDoubleClick, content }) => {
   const handleOnClick = (event) => {
     const target = event.target;
     if (target.tagName === 'A') {
       event.preventDefault();
       const href = target.getAttribute('href');
-      if (href) {
+      if (href && isValidUrl(href)) {
         window.open(href, '_blank');
         return;
       }
@@ -22,6 +28,8 @@ const Markdown = ({ onDoubleClick, content }) => {
       onDoubleClick();
     }
   };
+
+  const md = new MarkdownIt(markdownItOptions).use(MarkdownItReplaceLink);
 
   const htmlFromMarkdown = md.render(content || '');
 

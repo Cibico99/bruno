@@ -1,5 +1,10 @@
 import { useEffect } from 'react';
-import { showPreferences, updateCookies, updatePreferences } from 'providers/ReduxStore/slices/app';
+import {
+  showPreferences,
+  updateCookies,
+  updatePreferences,
+  updateSystemProxyEnvVariables
+} from 'providers/ReduxStore/slices/app';
 import {
   brunoConfigUpdateEvent,
   collectionAddDirectoryEvent,
@@ -14,7 +19,7 @@ import {
   runRequestEvent,
   scriptEnvironmentUpdateEvent
 } from 'providers/ReduxStore/slices/collections';
-import { collectionAddEnvFileEvent, openCollectionEvent } from 'providers/ReduxStore/slices/collections/actions';
+import { collectionAddEnvFileEvent, openCollectionEvent, hydrateCollectionsWithUiStateSnapshot } from 'providers/ReduxStore/slices/collections/actions';
 import toast from 'react-hot-toast';
 import { useDispatch } from 'react-redux';
 import { isElectron } from 'utils/common/platform';
@@ -136,9 +141,17 @@ const useIpcEvents = () => {
       dispatch(updatePreferences(val));
     });
 
+    const removeSystemProxyEnvUpdatesListener = ipcRenderer.on('main:load-system-proxy-env', (val) => {
+      dispatch(updateSystemProxyEnvVariables(val));
+    });
+
     const removeCookieUpdateListener = ipcRenderer.on('main:cookies-update', (val) => {
       dispatch(updateCookies(val));
     });
+
+    const removeSnapshotHydrationListener = ipcRenderer.on('main:hydrate-app-with-ui-state-snapshot', (val) => {
+      dispatch(hydrateCollectionsWithUiStateSnapshot(val));
+    })
 
     return () => {
       removeCollectionTreeUpdateListener();
@@ -155,6 +168,8 @@ const useIpcEvents = () => {
       removeShowPreferencesListener();
       removePreferencesUpdatesListener();
       removeCookieUpdateListener();
+      removeSystemProxyEnvUpdatesListener();
+      removeSnapshotHydrationListener();
     };
   }, [isElectron]);
 };

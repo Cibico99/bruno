@@ -33,15 +33,18 @@ import {
   requestCancelled,
   resetRunResults,
   responseReceived,
-  updateLastAction
+  updateLastAction,
+  setCollectionSecurityConfig
 } from './index';
 
 import { each } from 'lodash';
 import { closeAllCollectionTabs } from 'providers/ReduxStore/slices/tabs';
 import { resolveRequestFilename } from 'utils/common/platform';
-import { parseQueryParams, splitOnFirst } from 'utils/url/index';
+import { parsePathParams, parseQueryParams, splitOnFirst } from 'utils/url/index';
 import { sendCollectionOauth2Request as _sendCollectionOauth2Request } from 'utils/network/index';
 import { name } from 'file-loader';
+import slash from 'utils/common/slash';
+import { findCollectionByPathname, findEnvironmentInCollectionByName } from 'utils/collections/index';
 
 export const renameCollection = (newName, collectionUid) => (dispatch, getState) => {
   const state = getState();
@@ -192,10 +195,7 @@ export const sendCollectionOauth2Request = (collectionUid, itemUid) => (dispatch
 
     const environment = findEnvironmentInCollection(collectionCopy, collection.activeEnvironmentUid);
 
-    const externalSecrets = getExternalCollectionSecretsForActiveEnvironment({ collection });
-    const secretVariables = getFormattedCollectionSecretVariables({ externalSecrets });
-
-    _sendCollectionOauth2Request(collection, environment, collectionCopy.collectionVariables, itemUid, secretVariables)
+    _sendCollectionOauth2Request(collection, environment, collectionCopy.runtimeVariables)
       .then((response) => {
         if (response?.data?.error) {
           toast.error(response?.data?.error);
@@ -224,7 +224,7 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
     const collectionCopy = cloneDeep(collection);
 
     const environment = findEnvironmentInCollection(collectionCopy, collectionCopy.activeEnvironmentUid);
-    sendNetworkRequest(itemCopy, collectionCopy, environment, collectionCopy.collectionVariables)
+    sendNetworkRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables)
       .then((response) => {
         return dispatch(
           responseReceived({
@@ -284,7 +284,7 @@ export const cancelRunnerExecution = (cancelTokenUid) => (dispatch) => {
   cancelNetworkRequest(cancelTokenUid).catch((err) => console.log(err));
 };
 
-export const runCollectionFolder = (collectionUid, folderUid, recursive) => (dispatch, getState) => {
+export const runCollectionFolder = (collectionUid, folderUid, recursive, delay) => (dispatch, getState) => {
   const state = getState();
   const collection = findCollectionByUid(state.collections.collections, collectionUid);
 
@@ -314,8 +314,9 @@ export const runCollectionFolder = (collectionUid, folderUid, recursive) => (dis
         folder,
         collectionCopy,
         environment,
-        collectionCopy.collectionVariables,
-        recursive
+        collectionCopy.runtimeVariables,
+        recursive,
+        delay
       )
       .then(resolve)
       .catch((err) => {
@@ -375,6 +376,7 @@ export const newFolder = (folderName, collectionUid, itemUid) => (dispatch, getS
   });
 };
 
+// rename item
 export const renameItem = (newName, itemUid, collectionUid) => (dispatch, getState) => {
   const state = getState();
   const collection = findCollectionByUid(state.collections.collections, collectionUid);
@@ -401,7 +403,7 @@ export const renameItem = (newName, itemUid, collectionUid) => (dispatch, getSta
     }
     const { ipcRenderer } = window;
 
-    ipcRenderer.invoke('renderer:rename-item', item.pathname, newPathname, newName).then(resolve).catch(reject);
+    ipcRenderer.invoke('renderer:rename-item', slash(item.pathname), newPathname, newName).then(resolve).catch(reject);
   });
 };
 
@@ -700,7 +702,7 @@ export const moveItemToRootOfCollection = (collectionUid, draggedItemUid) => (di
 };
 
 export const newHttpRequest = (params) => (dispatch, getState) => {
-  const { requestName, requestType, requestUrl, requestMethod, collectionUid, itemUid, headers, body } = params;
+  const { requestName, requestType, requestUrl, requestMethod, collectionUid, itemUid, headers, body, auth } = params;
 
   return new Promise((resolve, reject) => {
     const state = getState();
@@ -710,10 +712,19 @@ export const newHttpRequest = (params) => (dispatch, getState) => {
     }
 
     const parts = splitOnFirst(requestUrl, '?');
-    const params = parseQueryParams(parts[1]);
-    each(params, (urlParam) => {
+    const queryParams = parseQueryParams(parts[1]);
+    each(queryParams, (urlParam) => {
       urlParam.enabled = true;
+      urlParam.type = 'query';
     });
+
+    const pathParams = parsePathParams(requestUrl);
+    each(pathParams, (pathParm) => {
+      pathParams.enabled = true;
+      pathParm.type = 'path';
+    });
+
+    const params = [...queryParams, ...pathParams];
 
     const item = {
       uid: uuid(),
@@ -732,6 +743,9 @@ export const newHttpRequest = (params) => (dispatch, getState) => {
           sparql: null,
           multipartForm: null,
           formUrlEncoded: null
+        },
+        auth: auth ?? {
+          mode: 'none'
         }
       }
     };
@@ -959,13 +973,15 @@ export const selectEnvironment = (environmentUid, collectionUid) => (dispatch, g
     const collectionCopy = cloneDeep(collection);
     if (environmentUid) {
       const environment = findEnvironmentInCollection(collectionCopy, environmentUid);
-      if (!environment) {
+      if (environment) {
+        ipcRenderer.invoke('renderer:update-ui-state-snapshot', { type: 'COLLECTION_ENVIRONMENT', data: { collectionPath: collection?.pathname, environmentName: environment?.name } })
+        dispatch(_selectEnvironment({ environmentUid, collectionUid }));
+        resolve();
+      }
+      else {
         return reject(new Error('Environment not found'));
       }
     }
-
-    dispatch(_selectEnvironment({ environmentUid, collectionUid }));
-    resolve();
   });
 };
 
@@ -1036,16 +1052,18 @@ export const openCollectionEvent = (uid, pathname, brunoConfig) => (dispatch, ge
     name: brunoConfig.name,
     pathname: pathname,
     items: [],
-    collectionVariables: {},
+    runtimeVariables: {},
     brunoConfig: brunoConfig
   };
 
   return new Promise((resolve, reject) => {
-    collectionSchema
-      .validate(collection)
-      .then(() => dispatch(_createCollection(collection)))
-      .then(resolve)
-      .catch(reject);
+    ipcRenderer.invoke('renderer:get-collection-security-config', pathname).then((securityConfig) => {
+      collectionSchema
+        .validate(collection)
+        .then(() => dispatch(_createCollection({ ...collection, securityConfig })))
+        .then(resolve)
+        .catch(reject);
+    });
   });
 };
 
@@ -1110,3 +1128,49 @@ export const importCollection = (collection, collectionLocation) => (dispatch, g
     ipcRenderer.invoke('renderer:import-collection', collection, collectionLocation).then(resolve).catch(reject);
   });
 };
+
+export const saveCollectionSecurityConfig = (collectionUid, securityConfig) => (dispatch, getState) => {
+  return new Promise((resolve, reject) => {
+    const { ipcRenderer } = window;
+    const state = getState();
+    const collection = findCollectionByUid(state.collections.collections, collectionUid);
+
+    ipcRenderer
+      .invoke('renderer:save-collection-security-config', collection?.pathname, securityConfig)
+      .then(async () => {
+        await dispatch(setCollectionSecurityConfig({ collectionUid, securityConfig }));
+        resolve();
+      })
+      .catch(reject);
+  });
+};
+
+
+export const hydrateCollectionsWithUiStateSnapshot = (payload) => (dispatch, getState) => {
+    const collectionSnapshotData = payload;
+    return new Promise((resolve, reject) => {
+      const state = getState();
+      try {
+        if(!collectionSnapshotData) resolve();
+        const { pathname, selectedEnvironment } = collectionSnapshotData;
+        const collection = findCollectionByPathname(state.collections.collections, pathname);
+        const collectionCopy = cloneDeep(collection);
+        const collectionUid = collectionCopy?.uid;
+
+        // update selected environment
+        if (selectedEnvironment) {
+          const environment = findEnvironmentInCollectionByName(collectionCopy, selectedEnvironment);
+          if (environment) {
+            dispatch(_selectEnvironment({ environmentUid: environment?.uid, collectionUid }));
+          }
+        }
+
+        // todo: add any other redux state that you want to save
+        
+        resolve();
+      }
+      catch(error) {
+        reject(error);
+      }
+    });
+  };

@@ -13,15 +13,23 @@ const {
   browseFiles,
   createDirectory,
   searchForBruFiles,
-  sanitizeDirectoryName
+  sanitizeDirectoryName,
+  isWSLPath,
+  normalizeWslPath,
+  normalizeAndResolvePath,
+  safeToRename
 } = require('../utils/filesystem');
 const { openCollectionDialog } = require('../app/collections');
 const { generateUidBasedOnHash, stringifyJson, safeParseJSON, safeStringifyJSON } = require('../utils/common');
 const { moveRequestUid, deleteRequestUid } = require('../cache/requestUids');
 const { deleteCookiesForDomain, getDomainsWithCookies } = require('../utils/cookies');
 const EnvironmentSecretsStore = require('../store/env-secrets');
+const CollectionSecurityStore = require('../store/collection-security');
+const UiStateSnapshot = require('../store/ui-state-snapshot');
 
 const environmentSecretsStore = new EnvironmentSecretsStore();
+const collectionSecurityStore = new CollectionSecurityStore();
+const UiStateSnapshotStore = new UiStateSnapshot();
 
 const envHasSecrets = (environment = {}) => {
   const secrets = _.filter(environment.variables, (v) => v.secret);
@@ -292,7 +300,7 @@ const registerRendererEventHandlers = (mainWindow, watcher, lastOpenedCollection
       }
 
       const newEnvFilePath = path.join(envDirPath, `${newName}.bru`);
-      if (fs.existsSync(newEnvFilePath)) {
+      if (!safeToRename(envFilePath, newEnvFilePath)) {
         throw new Error(`environment: ${newEnvFilePath} already exists`);
       }
 
@@ -324,14 +332,19 @@ const registerRendererEventHandlers = (mainWindow, watcher, lastOpenedCollection
   // rename item
   ipcMain.handle('renderer:rename-item', async (event, oldPath, newPath, newName) => {
     try {
+      // Normalize paths if they are WSL paths
+      oldPath = isWSLPath(oldPath) ? normalizeWslPath(oldPath) : normalizeAndResolvePath(oldPath);
+      newPath = isWSLPath(newPath) ? normalizeWslPath(newPath) : normalizeAndResolvePath(newPath);
+
+      // Check if the old path exists
       if (!fs.existsSync(oldPath)) {
         throw new Error(`path: ${oldPath} does not exist`);
       }
-      if (fs.existsSync(newPath)) {
-        throw new Error(`path: ${oldPath} already exists`);
+
+      if (!safeToRename(oldPath, newPath)) {
+        throw new Error(`path: ${newPath} already exists`);
       }
 
-      // if its directory, rename and return
       if (isDirectory(oldPath)) {
         const bruFilesAtSource = await searchForBruFiles(oldPath);
 
@@ -352,12 +365,13 @@ const registerRendererEventHandlers = (mainWindow, watcher, lastOpenedCollection
       const jsonData = bruToJson(data);
 
       jsonData.name = newName;
-
       moveRequestUid(oldPath, newPath);
 
       const content = jsonToBru(jsonData);
-      await writeFile(newPath, content);
       await fs.unlinkSync(oldPath);
+      await writeFile(newPath, content);
+
+      return newPath;
     } catch (error) {
       return Promise.reject(error);
     }
@@ -534,6 +548,15 @@ const registerRendererEventHandlers = (mainWindow, watcher, lastOpenedCollection
             const folderPath = path.join(currentPath, item.name);
             fs.mkdirSync(folderPath);
 
+            // If folder has a root element, then I should write its folder.bru file
+            if (item.root) {
+              const folderContent = jsonToCollectionBru(item.root, true);
+              if (folderContent) {
+                const bruFolderPath = path.join(folderPath, `folder.bru`);
+                fs.writeFileSync(bruFolderPath, folderContent);
+              }
+            }
+
             if (item.items && item.items.length) {
               parseCollectionItems(item.items, folderPath);
             }
@@ -542,6 +565,15 @@ const registerRendererEventHandlers = (mainWindow, watcher, lastOpenedCollection
       };
 
       await createDirectory(collectionPath);
+
+      // If initial folder has a root element, then I should write its folder.bru file
+      if (itemFolder.root) {
+        const folderContent = jsonToCollectionBru(itemFolder.root, true);
+        if (folderContent) {
+          const bruFolderPath = path.join(collectionPath, `folder.bru`);
+          fs.writeFileSync(bruFolderPath, folderContent);
+        }
+      }
 
       // create folder and files based on another folder
       await parseCollectionItems(itemFolder.items, collectionPath);
@@ -645,6 +677,32 @@ const registerRendererEventHandlers = (mainWindow, watcher, lastOpenedCollection
       mainWindow.webContents.send('main:cookies-update', safeParseJSON(safeStringifyJSON(domainsWithCookies)));
     } catch (error) {
       return Promise.reject(error);
+    }
+  });
+
+  ipcMain.handle('renderer:save-collection-security-config', async (event, collectionPath, securityConfig) => {
+    try {
+      collectionSecurityStore.setSecurityConfigForCollection(collectionPath, {
+        jsSandboxMode: securityConfig.jsSandboxMode
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  });
+
+  ipcMain.handle('renderer:get-collection-security-config', async (event, collectionPath) => {
+    try {
+      return collectionSecurityStore.getSecurityConfigForCollection(collectionPath);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  });
+
+  ipcMain.handle('renderer:update-ui-state-snapshot', (event, { type, data }) => {
+    try {
+      UiStateSnapshotStore.update({ type, data });
+    } catch (error) {
+      throw new Error(error.message);
     }
   });
 };
