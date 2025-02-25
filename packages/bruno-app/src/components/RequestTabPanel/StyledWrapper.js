@@ -10,6 +10,9 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: center;
     height: 10px;
+    min-height: 10px;
+    #width: 10px;
+    #min-width: 10px;
     padding: 0;
     cursor: row-resize;
     background: transparent;

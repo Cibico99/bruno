@@ -14,6 +14,7 @@ const getContentType = (headers = {}) => {
 };
 
 const interpolateVars = (request, envVariables = {}, runtimeVariables = {}, processEnvVars = {}) => {
+  const globalEnvironmentVariables = request?.globalEnvironmentVariables || {};
   const collectionVariables = request?.collectionVariables || {};
   const folderVariables = request?.folderVariables || {};
   const requestVariables = request?.requestVariables || {};
@@ -39,6 +40,7 @@ const interpolateVars = (request, envVariables = {}, runtimeVariables = {}, proc
 
     // runtimeVariables take precedence over envVars
     const combinedVars = {
+      ...globalEnvironmentVariables,
       ...collectionVariables,
       ...envVariables,
       ...folderVariables,
@@ -63,7 +65,11 @@ const interpolateVars = (request, envVariables = {}, runtimeVariables = {}, proc
 
   const contentType = getContentType(request.headers);
 
-  if (contentType.includes('json')) {
+  /*
+    We explicitly avoid interpolating buffer values because the file content is read as a buffer object in raw body mode. 
+    Even if the selected file's content type is JSON, this prevents the buffer object from being interpolated.
+  */
+  if (contentType.includes('json') && !Buffer.isBuffer(request.data)) {
     if (typeof request.data === 'string') {
       if (request.data.length) {
         request.data = _interpolate(request.data);
@@ -84,11 +90,12 @@ const interpolateVars = (request, envVariables = {}, runtimeVariables = {}, proc
       } catch (err) {}
     }
   } else if (contentType === 'multipart/form-data') {
-    if (typeof request.data === 'object' && !(request.data instanceof FormData)) {
+    if (Array.isArray(request?.data) && !(request.data instanceof FormData)) {
       try {
-        forOwn(request?.data, (value, key) => {
-          request.data[key] = _interpolate(value);
-        });        
+        request.data = request?.data?.map(d => ({
+          ...d,
+          value: _interpolate(d?.value)
+        }));   
       } catch (err) {}
     }
   } else {
@@ -226,6 +233,14 @@ const interpolateVars = (request, envVariables = {}, runtimeVariables = {}, proc
   if (request.wsse) {
     request.wsse.username = _interpolate(request.wsse.username) || '';
     request.wsse.password = _interpolate(request.wsse.password) || '';
+  }
+
+
+  // interpolate vars for ntlmConfig auth
+  if (request.ntlmConfig) {
+    request.ntlmConfig.username = _interpolate(request.ntlmConfig.username) || '';
+    request.ntlmConfig.password = _interpolate(request.ntlmConfig.password) || '';
+    request.ntlmConfig.domain = _interpolate(request.ntlmConfig.domain) || '';    
   }
 
   return request;
